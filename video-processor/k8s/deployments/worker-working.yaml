@@ -15,50 +15,22 @@ spec:
     spec:
       containers:
       - name: worker
-        image: python:3.11-slim
-        imagePullPolicy: IfNotPresent
-        command: ["/bin/bash", "-c"]
-        args:
-        - |
-          pip install requests &&
-          python -c "
-          import time, requests
-          
-          API_URL = 'http://api-service:8080'
-          
-          print('Worker starting...')
-          while True:
-              try:
-                  response = requests.get(f'{API_URL}/jobs/next', timeout=5)
-                  if response.status_code == 200:
-                      job = response.json()
-                      job_id = job['id']
-                      print(f'Processing job: {job_id}')
-                      
-                      requests.post(f'{API_URL}/jobs/{job_id}/status', 
-                                   json={'status': 'processing'})
-                      
-                      print(f'Simulating {job[\"operation\"]} processing...')
-                      time.sleep(10)
-                      
-                      requests.post(f'{API_URL}/jobs/{job_id}/status', 
-                                   json={'status': 'completed'})
-                      print(f'Job {job_id} completed')
-                  else:
-                      print('No jobs available')
-                  
-                  time.sleep(5)
-              except Exception as e:
-                  print(f'Error: {e}')
-                  time.sleep(10)
-          "
+        image: ffmpeg-worker:latest
+        imagePullPolicy: Never  # Use local image only
         env:
         - name: API_URL
           value: "http://api-service:8080"
+        volumeMounts:
+        - name: video-storage
+          mountPath: /storage
         resources:
           requests:
-            memory: "64Mi"
-            cpu: "50m"
+            memory: "256Mi"
+            cpu: "200m"
           limits:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: video-storage
+        persistentVolumeClaim:
+          claimName: video-storage-pvc 

@@ -8,9 +8,17 @@ spec:
   accessModes:
     - ReadWriteMany
   persistentVolumeReclaimPolicy: Retain
-  storageClassName: local-storage
+  storageClassName: local-path  # Match K3s default
   hostPath:
     path: /tmp/video-storage
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - andreslozano
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -23,4 +31,4 @@ spec:
   resources:
     requests:
       storage: 10Gi
-  storageClassName: local-storage
+  storageClassName: local-path  # Use K3s default

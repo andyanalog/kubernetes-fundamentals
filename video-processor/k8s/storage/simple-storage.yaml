@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-worker
+  namespace: video-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: video-worker
+  template:
+    metadata:
+      labels:
+        app: video-worker
+    spec:
+      containers:
+      - name: worker
+        image: alpine:3.18
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          apk add --no-cache ffmpeg python3 py3-pip py3-requests
+          pip3 install requests
+          
+          cat > /app/worker.py << 'EOF'
+          import os
+          import time
+          import subprocess
+          import requests
+          from pathlib import Path
+          
+          STORAGE_PATH = "/storage"
+          INPUT_PATH = f"{STORAGE_PATH}/input"
+          OUTPUT_PATH = f"{STORAGE_PATH}/output"
+          API_URL = os.getenv("API_URL", "http://api-service:8080")
+          
+          def process_video(job_data):
+              input_file = f"{INPUT_PATH}/{job_data['input_filename']}"
+              output_file = f"{OUTPUT_PATH}/{job_data['output_filename']}"
+              
+              Path(OUTPUT_PATH).mkdir(parents=True, exist_ok=True)
+              
+              if job_data['operation'] == 'compress':
+                  cmd = ['ffmpeg', '-i', input_file, '-c:v', 'libx264', '-crf', '28', '-c:a', 'aac', '-b:a', '128k', '-y', output_file]
+              elif job_data['operation'] == 'resize':
+                  resolution = job_data.get('resolution', '720x480')
+                  cmd = ['ffmpeg', '-i', input_file, '-vf', f'scale={resolution}', '-c:a', 'copy', '-y', output_file]
+              elif job_data['operation'] == 'thumbnail':
+                  cmd = ['ffmpeg', '-i', input_file, '-vf', 'thumbnail,scale=320:240', '-frames:v', '1', '-y', output_file]
+              else:
+                  return False
+              
+              print(f"Processing: {' '.join(cmd)}")
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              
+              if result.returncode != 0:
+                  print(f"FFmpeg error: {result.stderr}")
+                  return False
+              return True
+          
+          def update_job_status(job_id, status, message=""):
+              try:
+                  requests.post(f"{API_URL}/jobs/{job_id}/status", json={"status": status, "message": message})
+              except Exception as e:
+                  print(f"Failed to update job status: {e}")
+          
+          print("FFmpeg Worker starting...")
+          
+          while True:
+              try:
+                  response = requests.get(f"{API_URL}/jobs/next")
+                  if response.status_code == 200:
+                      job = response.json()
+                      job_id = job['id']
+                      
+                      print(f"Processing job {job_id}")
+                      update_job_status(job_id, "processing")
+                      
+                      if process_video(job):
+                          update_job_status(job_id, "completed")
+                          print(f"Job {job_id} completed successfully")
+                      else:
+                          update_job_status(job_id, "failed", "FFmpeg processing failed")
+                          print(f"Job {job_id} failed")
+                  else:
+                      print("No jobs available")
+                  
+                  time.sleep(5)
+                  
+              except Exception as e:
+                  print(f"Worker error: {e}")
+                  time.sleep(10)
+          EOF
+          
+          python3 /app/worker.py
+        env:
+        - name: API_URL
+          value: "http://api-service:8080"
+        volumeMounts:
+        - name: video-storage
+          mountPath: /storage
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: video-storage
+        persistentVolumeClaim:
+          claimName: video-storage-pvc
