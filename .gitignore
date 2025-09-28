@@ -1,1 +1,2 @@
 *.mp4
+video-processor/docker/ffmpeg-worker/ffmpeg-worker.tar
