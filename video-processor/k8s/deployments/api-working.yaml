@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: video-api
   namespace: video-processor
+  labels:
+    app: video-processing-system
+    component: api
 spec:
   replicas: 1
   selector:
@@ -12,6 +15,7 @@ spec:
     metadata:
       labels:
         app: video-api
+        component: api
     spec:
       containers:
       - name: api
@@ -29,6 +33,10 @@ spec:
           app = Flask(__name__)
           jobs = {}
 
+          @app.route('/health', methods=['GET'])
+          def health():
+              return jsonify({'status': 'healthy', 'jobs': len(jobs)}), 200
+
           @app.route('/jobs', methods=['POST'])
           def create_job():
               data = request.json
@@ -38,8 +46,11 @@ spec:
                   'input_filename': data['input_filename'], 
                   'output_filename': data['output_filename'],
                   'operation': data['operation'],
+                  'resolution': data.get('resolution', '720x480'),
                   'status': 'queued',
-                  'created_at': datetime.now().isoformat()
+                  'created_at': datetime.now().isoformat(),
+                  'updated_at': datetime.now().isoformat(),
+                  'message': ''
               }
               print(f'Created job: {job_id}')
               return jsonify({'job_id': job_id}), 201
@@ -56,17 +67,41 @@ spec:
               data = request.json
               if job_id in jobs:
                   jobs[job_id]['status'] = data['status']
+                  jobs[job_id]['message'] = data.get('message', '')
+                  jobs[job_id]['updated_at'] = datetime.now().isoformat()
+                  print(f'Updated job {job_id}: {data[\"status\"]}')
               return jsonify({'success': True})
 
           @app.route('/jobs', methods=['GET'])
           def list_jobs():
               return jsonify(list(jobs.values()))
 
-          print('Starting API server...')
-          app.run(host='0.0.0.0', port=8080)
+          @app.route('/jobs/<job_id>', methods=['GET'])
+          def get_job(job_id):
+              if job_id in jobs:
+                  return jsonify(jobs[job_id])
+              return jsonify({'error': 'Job not found'}), 404
+
+          print('Starting API server on port 8080...')
+          app.run(host='0.0.0.0', port=8080, debug=False)
           "
         ports:
         - containerPort: 8080
+          name: http
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
         resources:
           requests:
             memory: "128Mi"
