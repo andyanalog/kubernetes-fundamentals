@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-frontend
+  namespace: video-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: video-frontend
+  template:
+    metadata:
+      labels:
+        app: video-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: nginx:alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo '<!DOCTYPE html>
+          <html>
+          <head>
+              <title>Video Processor</title>
+              <style>
+                  body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                  button { background: #007cba; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer; margin: 5px; }
+                  .job { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 3px; }
+                  .status { padding: 2px 8px; border-radius: 3px; color: white; font-size: 12px; }
+                  .queued { background: #ffa500; }
+                  .processing { background: #2196f3; }
+                  .completed { background: #4caf50; }
+              </style>
+          </head>
+          <body>
+              <h1>🎬 Video Processing Pipeline</h1>
+              <div>
+                  <h3>Create Test Job</h3>
+                  <button onclick="createJob()">Create Test Job</button>
+                  <div id="result"></div>
+              </div>
+              <h3>Jobs</h3>
+              <div id="jobs"></div>
+              <script>
+                  function createJob() {
+                      fetch("/api/jobs", {
+                          method: "POST",
+                          headers: {"Content-Type": "application/json"},
+                          body: JSON.stringify({
+                              input_filename: "test_" + Date.now() + ".mp4",
+                              output_filename: "processed_" + Date.now() + ".mp4", 
+                              operation: "compress"
+                          })
+                      })
+                      .then(r => r.json())
+                      .then(d => {
+                          document.getElementById("result").innerHTML = "✅ Job created: " + d.job_id.substr(0,8) + "...";
+                          loadJobs();
+                      });
+                  }
+                  
+                  function loadJobs() {
+                      fetch("/api/jobs")
+                      .then(r => r.json())
+                      .then(jobs => {
+                          document.getElementById("jobs").innerHTML = jobs.map(j => 
+                              "<div class=\"job\">" + j.input_filename + " → <span class=\"status " + j.status + "\">" + j.status.toUpperCase() + "</span></div>"
+                          ).join("");
+                      });
+                  }
+                  
+                  setInterval(loadJobs, 3000);
+                  loadJobs();
+              </script>
+          </body>
+          </html>' > /usr/share/nginx/html/index.html &&
+          echo 'server {
+              listen 80;
+              location / {
+                  root /usr/share/nginx/html;
+                  index index.html;
+              }
+              location /api/ {
+                  proxy_pass http://api-service:8080/;
+              }
+          }' > /etc/nginx/conf.d/default.conf &&
+          nginx -g "daemon off;"
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"

@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-api
+  namespace: video-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: video-api
+  template:
+    metadata:
+      labels:
+        app: video-api
+    spec:
+      containers:
+      - name: api
+        image: python:3.11-slim
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args: 
+        - |
+          pip install flask &&
+          python -c "
+          from flask import Flask, request, jsonify
+          import json, uuid
+          from datetime import datetime
+
+          app = Flask(__name__)
+          jobs = {}
+
+          @app.route('/jobs', methods=['POST'])
+          def create_job():
+              data = request.json
+              job_id = str(uuid.uuid4())
+              jobs[job_id] = {
+                  'id': job_id,
+                  'input_filename': data['input_filename'], 
+                  'output_filename': data['output_filename'],
+                  'operation': data['operation'],
+                  'status': 'queued',
+                  'created_at': datetime.now().isoformat()
+              }
+              print(f'Created job: {job_id}')
+              return jsonify({'job_id': job_id}), 201
+
+          @app.route('/jobs/next', methods=['GET']) 
+          def get_next_job():
+              for job_id, job in jobs.items():
+                  if job['status'] == 'queued':
+                      return jsonify(job)
+              return jsonify({'message': 'No jobs available'}), 404
+
+          @app.route('/jobs/<job_id>/status', methods=['POST'])
+          def update_job_status(job_id):
+              data = request.json
+              if job_id in jobs:
+                  jobs[job_id]['status'] = data['status']
+              return jsonify({'success': True})
+
+          @app.route('/jobs', methods=['GET'])
+          def list_jobs():
+              return jsonify(list(jobs.values()))
+
+          print('Starting API server...')
+          app.run(host='0.0.0.0', port=8080)
+          "
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
