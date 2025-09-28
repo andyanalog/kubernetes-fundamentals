@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ffmpeg-config
+  namespace: video-processor
+data:
+  compress_quality: "28"
+  default_resolution: "720x480"
+  thumbnail_size: "320x240"

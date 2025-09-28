@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Processor</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .upload-area { border: 2px dashed #ccc; padding: 40px; text-align: center; margin: 20px 0; }
+        .job { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .status { padding: 2px 8px; border-radius: 3px; color: white; font-size: 12px; }
+        .queued { background: #ffa500; }
+        .processing { background: #2196f3; }
+        .completed { background: #4caf50; }
+        .failed { background: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>Video Processing Pipeline</h1>
+    
+    <div class="upload-area">
+        <h3>Upload Video</h3>
+        <input type="file" id="videoFile" accept="video/*">
+        <select id="operation">
+            <option value="compress">Compress Video</option>
+            <option value="resize">Resize to 720p</option>
+            <option value="thumbnail">Generate Thumbnail</option>
+        </select>
+        <button onclick="uploadVideo()">Process Video</button>
+    </div>
+    
+    <div id="status"></div>
+    
+    <h3>Processing Jobs</h3>
+    <div id="jobs"></div>
+    
+    <script src="upload.js"></script>
+</body>
+</html>

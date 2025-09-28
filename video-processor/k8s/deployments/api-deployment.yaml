@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: video-api
+  namespace: video-processor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: video-api
+  template:
+    metadata:
+      labels:
+        app: video-api
+    spec:
+      containers:
+      - name: api
+        image: video-api:latest
+        imagePullPolicy: Never  # For local images
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: storage
+          mountPath: /storage
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: video-storage-pvc
