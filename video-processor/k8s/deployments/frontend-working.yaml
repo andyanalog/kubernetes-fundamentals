@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: video-frontend
   namespace: video-processor
+  labels:
+    app: video-processing-system
+    component: frontend
 spec:
   replicas: 1
   selector:
@@ -12,6 +15,7 @@ spec:
     metadata:
       labels:
         app: video-frontend
+        component: frontend
     spec:
       containers:
       - name: frontend
@@ -19,76 +23,405 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
+          name: http
         command: ["/bin/sh", "-c"]
         args:
         - |
-          echo '<!DOCTYPE html>
+          cat > /usr/share/nginx/html/index.html << 'EOF'
+          <!DOCTYPE html>
           <html>
           <head>
-              <title>Video Processor</title>
+              <title>Video Processing Pipeline</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
               <style>
-                  body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-                  button { background: #007cba; color: white; padding: 10px 20px; border: none; border-radius: 3px; cursor: pointer; margin: 5px; }
-                  .job { border: 1px solid #ddd; padding: 10px; margin: 10px 0; border-radius: 3px; }
-                  .status { padding: 2px 8px; border-radius: 3px; color: white; font-size: 12px; }
-                  .queued { background: #ffa500; }
-                  .processing { background: #2196f3; }
-                  .completed { background: #4caf50; }
+                  body { 
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+                      max-width: 900px; 
+                      margin: 0 auto; 
+                      padding: 20px; 
+                      background: #f5f7fa;
+                      line-height: 1.6;
+                  }
+                  .container { 
+                      background: white; 
+                      padding: 30px; 
+                      border-radius: 12px; 
+                      box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+                  }
+                  h1 { 
+                      color: #2c3e50; 
+                      margin-bottom: 30px; 
+                      text-align: center;
+                      font-size: 2.2em;
+                  }
+                  .upload-section { 
+                      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                      color: white;
+                      padding: 25px; 
+                      border-radius: 8px; 
+                      margin: 20px 0; 
+                  }
+                  .upload-section h3 { margin-top: 0; color: white; }
+                  button { 
+                      background: #27ae60; 
+                      color: white; 
+                      padding: 12px 24px; 
+                      border: none; 
+                      border-radius: 6px; 
+                      cursor: pointer; 
+                      margin: 8px 5px; 
+                      font-size: 14px;
+                      font-weight: 600;
+                      transition: all 0.3s ease;
+                  }
+                  button:hover { 
+                      background: #219a52; 
+                      transform: translateY(-1px);
+                      box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3);
+                  }
+                  select, input[type="file"] { 
+                      padding: 10px; 
+                      margin: 8px 5px; 
+                      border-radius: 6px; 
+                      border: 1px solid rgba(255,255,255,0.3); 
+                      background: rgba(255,255,255,0.1);
+                      color: white;
+                  }
+                  select option { color: #333; }
+                  input[type="file"] { background: rgba(255,255,255,0.9); color: #333; }
+                  .job { 
+                      border: 1px solid #e8ecf1; 
+                      padding: 20px; 
+                      margin: 15px 0; 
+                      border-radius: 8px; 
+                      background: #fafbfc;
+                      transition: all 0.3s ease;
+                  }
+                  .job:hover { 
+                      transform: translateY(-2px);
+                      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+                  }
+                  .status { 
+                      padding: 6px 14px; 
+                      border-radius: 20px; 
+                      color: white; 
+                      font-size: 12px; 
+                      font-weight: bold;
+                      display: inline-block;
+                      margin-left: 12px;
+                      text-transform: uppercase;
+                      letter-spacing: 0.5px;
+                  }
+                  .queued { background: linear-gradient(135deg, #f39c12, #e67e22); }
+                  .processing { background: linear-gradient(135deg, #3498db, #2980b9); }
+                  .completed { background: linear-gradient(135deg, #27ae60, #229954); }
+                  .failed { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+                  .job-info { 
+                      margin-top: 12px; 
+                      font-size: 13px; 
+                      color: #7f8c8d; 
+                      line-height: 1.4;
+                  }
+                  #result { 
+                      margin-top: 15px; 
+                      padding: 12px 16px; 
+                      border-radius: 6px; 
+                      font-weight: 500;
+                  }
+                  .success { 
+                      background: linear-gradient(135deg, #d5f4e6, #b8e6d0); 
+                      color: #27ae60; 
+                      border: 1px solid #a3d9c2; 
+                  }
+                  .error { 
+                      background: linear-gradient(135deg, #fdf2f2, #f8e7e7); 
+                      color: #e74c3c; 
+                      border: 1px solid #ebccd1; 
+                  }
+                  .stats { 
+                      display: flex; 
+                      justify-content: space-around; 
+                      margin: 20px 0; 
+                      padding: 20px;
+                      background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+                      border-radius: 8px;
+                  }
+                  .stat { text-align: center; }
+                  .stat-number { font-size: 24px; font-weight: bold; color: #2c3e50; }
+                  .stat-label { font-size: 12px; color: #7f8c8d; text-transform: uppercase; }
+                  .empty-state { 
+                      text-align: center; 
+                      padding: 40px; 
+                      color: #95a5a6; 
+                      font-style: italic;
+                  }
+                  .refresh-button {
+                      background: #3498db;
+                      font-size: 12px;
+                      padding: 8px 16px;
+                  }
+                  .refresh-button:hover { background: #2980b9; }
               </style>
           </head>
           <body>
-              <h1>🎬 Video Processing Pipeline</h1>
-              <div>
-                  <h3>Create Test Job</h3>
-                  <button onclick="createJob()">Create Test Job</button>
-                  <div id="result"></div>
+              <div class="container">
+                  <h1>🎬 Video Processing Pipeline</h1>
+                  
+                  <div class="upload-section">
+                      <h3>📹 Process Video</h3>
+                      <div>
+                          <input type="file" id="videoFile" accept="video/*" placeholder="Select video file">
+                          <select id="operation">
+                              <option value="compress">🗜️ Compress Video (H.264, CRF 28)</option>
+                              <option value="resize">📐 Resize to 720p</option>
+                              <option value="thumbnail">🖼️ Generate Thumbnail</option>
+                          </select>
+                          <button onclick="createJob()">🚀 Process Video</button>
+                          <button onclick="createTestJob()" style="background: rgba(255,255,255,0.2);">🧪 Create Test Job</button>
+                      </div>
+                      <div id="result"></div>
+                  </div>
+                  
+                  <div class="stats" id="stats"></div>
+                  
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <h3>📋 Processing Jobs</h3>
+                      <button class="refresh-button" onclick="loadJobs()">🔄 Refresh</button>
+                  </div>
+                  <div id="jobs"></div>
               </div>
-              <h3>Jobs</h3>
-              <div id="jobs"></div>
+              
               <script>
+                  let jobStats = { total: 0, queued: 0, processing: 0, completed: 0, failed: 0 };
+                  
                   function createJob() {
+                      const fileInput = document.getElementById('videoFile');
+                      const operation = document.getElementById('operation').value;
+                      const file = fileInput.files[0];
+                      
+                      if (!file) {
+                          showResult('⚠️ Please select a video file', 'error');
+                          return;
+                      }
+                      
+                      const inputFilename = file.name;
+                      const outputFilename = generateOutputFilename(file.name, operation);
+                      
+                      submitJob(inputFilename, outputFilename, operation);
+                  }
+                  
+                  function createTestJob() {
+                      const operations = ['compress', 'resize', 'thumbnail'];
+                      const operation = operations[Math.floor(Math.random() * operations.length)];
+                      const timestamp = Date.now();
+                      const inputFilename = `test_video_${timestamp}.mp4`;
+                      const outputFilename = generateOutputFilename(inputFilename, operation);
+                      
+                      submitJob(inputFilename, outputFilename, operation);
+                  }
+                  
+                  function submitJob(inputFilename, outputFilename, operation) {
                       fetch("/api/jobs", {
                           method: "POST",
                           headers: {"Content-Type": "application/json"},
                           body: JSON.stringify({
-                              input_filename: "test_" + Date.now() + ".mp4",
-                              output_filename: "processed_" + Date.now() + ".mp4", 
-                              operation: "compress"
+                              input_filename: inputFilename,
+                              output_filename: outputFilename,
+                              operation: operation
                           })
                       })
                       .then(r => r.json())
                       .then(d => {
-                          document.getElementById("result").innerHTML = "✅ Job created: " + d.job_id.substr(0,8) + "...";
+                          showResult(`✅ Job created successfully: ${d.job_id.substr(0,8)}...`, 'success');
                           loadJobs();
+                          // Clear file input
+                          document.getElementById('videoFile').value = '';
+                      })
+                      .catch(e => {
+                          showResult('❌ Error creating job. Please check the API connection.', 'error');
+                          console.error('Job creation error:', e);
                       });
+                  }
+                  
+                  function generateOutputFilename(inputFilename, operation) {
+                      const name = inputFilename.split('.')[0];
+                      const extension = operation === 'thumbnail' ? 'jpg' : 'mp4';
+                      return `${name}_${operation}.${extension}`;
+                  }
+                  
+                  function showResult(message, type) {
+                      const resultDiv = document.getElementById('result');
+                      resultDiv.innerHTML = message;
+                      resultDiv.className = type;
+                      
+                      // Auto-clear after 5 seconds
+                      setTimeout(() => {
+                          resultDiv.innerHTML = '';
+                          resultDiv.className = '';
+                      }, 5000);
+                  }
+                  
+                  function updateStats(jobs) {
+                      jobStats = { total: 0, queued: 0, processing: 0, completed: 0, failed: 0 };
+                      
+                      jobs.forEach(job => {
+                          jobStats.total++;
+                          jobStats[job.status]++;
+                      });
+                      
+                      document.getElementById('stats').innerHTML = `
+                          <div class="stat">
+                              <div class="stat-number">${jobStats.total}</div>
+                              <div class="stat-label">Total Jobs</div>
+                          </div>
+                          <div class="stat">
+                              <div class="stat-number">${jobStats.queued}</div>
+                              <div class="stat-label">Queued</div>
+                          </div>
+                          <div class="stat">
+                              <div class="stat-number">${jobStats.processing}</div>
+                              <div class="stat-label">Processing</div>
+                          </div>
+                          <div class="stat">
+                              <div class="stat-number">${jobStats.completed}</div>
+                              <div class="stat-label">Completed</div>
+                          </div>
+                          <div class="stat">
+                              <div class="stat-number">${jobStats.failed}</div>
+                              <div class="stat-label">Failed</div>
+                          </div>
+                      `;
                   }
                   
                   function loadJobs() {
                       fetch("/api/jobs")
                       .then(r => r.json())
                       .then(jobs => {
-                          document.getElementById("jobs").innerHTML = jobs.map(j => 
-                              "<div class=\"job\">" + j.input_filename + " → <span class=\"status " + j.status + "\">" + j.status.toUpperCase() + "</span></div>"
-                          ).join("");
+                          const jobsDiv = document.getElementById('jobs');
+                          
+                          updateStats(jobs);
+                          
+                          if (jobs.length === 0) {
+                              jobsDiv.innerHTML = '<div class="empty-state">🎭 No jobs yet. Create one above to get started!</div>';
+                              return;
+                          }
+                          
+                          // Sort jobs by creation time (newest first)
+                          jobs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                          
+                          jobsDiv.innerHTML = jobs.map(j => {
+                              const createdAt = new Date(j.created_at).toLocaleString();
+                              const updatedAt = j.updated_at ? new Date(j.updated_at).toLocaleString() : createdAt;
+                              
+                              return `<div class="job">
+                                  <div>
+                                      <strong>📁 ${j.input_filename}</strong> → <strong>${j.output_filename}</strong>
+                                      <span class="status ${j.status}">${j.status}</span>
+                                  </div>
+                                  <div class="job-info">
+                                      <strong>Operation:</strong> ${j.operation} | 
+                                      <strong>Created:</strong> ${createdAt}
+                                      ${j.updated_at && j.updated_at !== j.created_at ? `<br><strong>Updated:</strong> ${updatedAt}` : ''}
+                                      ${j.message ? `<br><strong>Message:</strong> ${j.message}` : ''}
+                                  </div>
+                              </div>`;
+                          }).join("");
+                      })
+                      .catch(e => {
+                          console.error('Error loading jobs:', e);
+                          document.getElementById('jobs').innerHTML = 
+                              '<div class="error">❌ Failed to load jobs. Please check if the API service is running.</div>';
                       });
                   }
                   
+                  // Auto-refresh jobs every 3 seconds
                   setInterval(loadJobs, 3000);
+                  
+                  // Initial load
                   loadJobs();
+                  
+                  // Add connection status indicator
+                  function checkApiConnection() {
+                      fetch('/api/health')
+                          .then(r => r.json())
+                          .then(() => {
+                              document.title = '🟢 Video Processing Pipeline';
+                          })
+                          .catch(() => {
+                              document.title = '🔴 Video Processing Pipeline (API Offline)';
+                          });
+                  }
+                  
+                  setInterval(checkApiConnection, 10000);
+                  checkApiConnection();
               </script>
           </body>
-          </html>' > /usr/share/nginx/html/index.html &&
-          echo 'server {
+          </html>
+          EOF
+          
+          cat > /etc/nginx/conf.d/default.conf << 'EOF'
+          server {
               listen 80;
+              server_name localhost;
+              
+              # Enable gzip compression
+              gzip on;
+              gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+              
               location / {
                   root /usr/share/nginx/html;
                   index index.html;
+                  try_files $uri $uri/ =404;
+                  
+                  # Cache static files
+                  expires 1h;
+                  add_header Cache-Control "public, immutable";
               }
+              
               location /api/ {
                   proxy_pass http://api-service:8080/;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  
+                  # API timeouts
+                  proxy_connect_timeout 10s;
+                  proxy_send_timeout 10s;
+                  proxy_read_timeout 10s;
+                  
+                  # Disable caching for API calls
+                  add_header Cache-Control "no-cache, no-store, must-revalidate";
+                  add_header Pragma "no-cache";
+                  add_header Expires "0";
               }
-          }' > /etc/nginx/conf.d/default.conf &&
+              
+              # Health check endpoint
+              location /nginx-health {
+                  access_log off;
+                  return 200 "healthy\n";
+                  add_header Content-Type text/plain;
+              }
+          }
+          EOF
+          
+          echo "🚀 Starting Nginx server..."
           nginx -g "daemon off;"
+        livenessProbe:
+          httpGet:
+            path: /nginx-health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
         resources:
           requests:
             memory: "32Mi"
